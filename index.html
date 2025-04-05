@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Reserva de Assentos</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  
+  <h1 class="titulo-principal">Caravana 23 de Maio - Bate e Volta</h1>
+  <div class="main-container">
+    <div class="mapa-wrapper">
+      <h2>Frente do ônibus</h2>
+      <div id="mapa-assentos"></div>
+      <h2>Traseira do ônibus</h2>
+    </div>
+
+    <form id="form-reserva">
+      <h2>Digite suas informações: </h2>
+      <input type="text" name="nome" placeholder="Nome completo" required />
+      <input type="number" name="idade" placeholder="Idade" required />
+      <input type="text" name="tipoDocumento" placeholder="Tipo de documento (ex: RG, CNH...)" required />
+      <input type="text" name="documento" placeholder="Nº do documento" required />
+      <input type="text" name="orgao" placeholder="Órgão emissor (Ex: SSP/RN, ITEP...)" required />
+      <input type="text" name="igreja" placeholder="Qual sua ala?" required />
+
+      <label for="comprovante" class="comprovante-label">
+        Anexe o comprovante de pagamento:
+      </label>
+      <input type="file" id="comprovante" accept="image/*,application/pdf" required />
+
+      <input type="hidden" name="assento" id="assentoSelecionado" required />
+      <button type="submit">Reservar</button>
+    </form>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import {
+      getFirestore,
+      collection,
+      addDoc,
+      getDocs
+    } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    import {
+      getStorage,
+      ref,
+      uploadBytes,
+      getDownloadURL
+    } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDrhP0liPL7Ae6mNRiZYpJVI5zRTahd89E",
+      authDomain: "reservaassentos.firebaseapp.com",
+      projectId: "reservaassentos",
+      storageBucket: "reservaassentos.appspot.com",
+      messagingSenderId: "472838187353",
+      appId: "1:472838187353:web:f335074dd24276421ac448",
+      measurementId: "G-EEGHDW8Q24"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const storage = getStorage(app);
+
+    const mapa = document.getElementById("mapa-assentos");
+    const form = document.getElementById("form-reserva");
+    const inputAssento = document.getElementById("assentoSelecionado");
+    const inputComprovante = document.getElementById("comprovante");
+
+    async function carregarAssentos() {
+      const snapshot = await getDocs(collection(db, "reservas"));
+      const ocupados = snapshot.docs.map(doc => Number(doc.data().assento));
+
+      for (let i = 1; i <= 48; i += 4) {
+        const fileira = document.createElement("div");
+        fileira.classList.add("fileira");
+
+        for (let j = 0; j < 4; j++) {
+          const num = i + j;
+
+          if (j === 2) {
+            const corredor = document.createElement("div");
+            corredor.classList.add("corredor");
+            fileira.appendChild(corredor);
+          }
+
+          const assento = document.createElement("button");
+          assento.classList.add("assento");
+          assento.textContent = num;
+
+          if (ocupados.includes(num)) {
+            assento.classList.add("ocupado");
+            assento.disabled = true;
+          } else {
+            assento.addEventListener("click", (e) => {
+              e.preventDefault();
+              document.querySelectorAll(".assento.selecionado").forEach(a => a.classList.remove("selecionado"));
+              assento.classList.add("selecionado");
+              inputAssento.value = num;
+            });
+          }
+
+          fileira.appendChild(assento);
+        }
+
+        mapa.appendChild(fileira);
+      }
+
+      const fileiraFinal = document.createElement("div");
+      fileiraFinal.classList.add("fileira");
+
+      [49, 50].forEach((num) => {
+        const assento = document.createElement("button");
+        assento.classList.add("assento");
+        assento.textContent = num;
+
+        if (ocupados.includes(num)) {
+          assento.classList.add("ocupado");
+          assento.disabled = true;
+        } else {
+          assento.addEventListener("click", (e) => {
+            e.preventDefault();
+            document.querySelectorAll(".assento.selecionado").forEach(a => a.classList.remove("selecionado"));
+            assento.classList.add("selecionado");
+            inputAssento.value = num;
+          });
+        }
+
+        fileiraFinal.appendChild(assento);
+      });
+
+      mapa.appendChild(fileiraFinal);
+    }
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      if (!inputAssento.value) {
+        alert("Selecione um assento antes de reservar.");
+        return;
+      }
+
+      const arquivo = inputComprovante.files[0];
+      if (!arquivo) {
+        alert("Envie o comprovante de pagamento.");
+        return;
+      }
+
+      try {
+        const storageRef = ref(storage, `comprovantes/${Date.now()}_${arquivo.name}`);
+        await uploadBytes(storageRef, arquivo);
+        const urlComprovante = await getDownloadURL(storageRef);
+
+        const dados = {
+          nome: form.nome.value,
+          idade: form.idade.value,
+          documento: form.documento.value,
+          orgao: form.orgao.value,
+          igreja: form.igreja.value,
+          assento: Number(inputAssento.value),
+          comprovanteURL: urlComprovante
+        };
+
+        await addDoc(collection(db, "reservas"), dados);
+        alert("Reserva realizada com sucesso!");
+        location.reload();
+      } catch (err) {
+        console.error("Erro ao enviar reserva:", err);
+        alert("Erro ao fazer a reserva.");
+      }
+    });
+
+    carregarAssentos();
+  </script>
+</body>
+</html>
